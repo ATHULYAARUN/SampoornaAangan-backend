@@ -11,9 +11,11 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# Firebase service account key
+# Firebase service account keys
 firebase-service-account.json
 serviceAccountKey.json
+*firebase-adminsdk*.json
+anganwadi-*-firebase-adminsdk-*.json
 
 # Logs
 logs
