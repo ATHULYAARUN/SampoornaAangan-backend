@@ -229,25 +229,91 @@ const checkPermission = (permission) => {
   };
 };
 
+// Middleware for flexible authentication (supports both Firebase and JWT tokens)
+const verifyFlexibleAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access denied. No token provided or invalid format.',
+      });
+    }
+
+    const token = authHeader.substring(7);
+    let authenticated = false;
+
+    // Try Firebase token first
+    try {
+      const decodedToken = await verifyFirebaseToken(token);
+      const user = await User.findOne({
+        firebaseUid: decodedToken.uid,
+        isActive: true
+      });
+
+      if (user) {
+        req.user = user;
+        req.firebaseUser = decodedToken;
+        req.authType = 'firebase';
+        authenticated = true;
+      }
+    } catch (firebaseError) {
+      // Try JWT token for admin
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const admin = await Admin.findById(decoded.id).select('-password');
+
+        if (admin && admin.isActive && !admin.isLocked) {
+          req.admin = admin;
+          req.user = admin;
+          req.authType = 'jwt';
+          authenticated = true;
+        }
+      } catch (jwtError) {
+        console.error('Both Firebase and JWT authentication failed:', {
+          firebaseError: firebaseError.message,
+          jwtError: jwtError.message
+        });
+      }
+    }
+
+    if (!authenticated) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token.',
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Flexible auth middleware error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Token verification failed.',
+    });
+  }
+};
+
 // Middleware for optional authentication (doesn't fail if no token)
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return next(); // Continue without authentication
     }
-    
+
     const token = authHeader.substring(7);
-    
+
     try {
       // Try Firebase token first
       const decodedToken = await verifyFirebaseToken(token);
-      const user = await User.findOne({ 
+      const user = await User.findOne({
         firebaseUid: decodedToken.uid,
-        isActive: true 
+        isActive: true
       });
-      
+
       if (user) {
         req.user = user;
         req.firebaseUser = decodedToken;
@@ -258,7 +324,7 @@ const optionalAuth = async (req, res, next) => {
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const admin = await Admin.findById(decoded.id).select('-password');
-        
+
         if (admin && admin.isActive && !admin.isLocked) {
           req.admin = admin;
           req.user = admin;
@@ -267,7 +333,7 @@ const optionalAuth = async (req, res, next) => {
         // Ignore JWT errors in optional auth
       }
     }
-    
+
     next();
   } catch (error) {
     console.error('Optional auth middleware error:', error);
@@ -306,6 +372,7 @@ module.exports = {
   verifyFirebaseAuth,
   verifyUserAuth,
   verifyAdminAuth,
+  verifyFlexibleAuth,
   checkRole,
   checkPermission,
   optionalAuth,

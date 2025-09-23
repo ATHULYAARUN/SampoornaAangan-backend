@@ -461,51 +461,56 @@ const googleLogin = async (req, res) => {
     // Verify Firebase token
     const decodedToken = await verifyFirebaseToken(idToken);
     
-    // Find or create user in MongoDB
+    // First, try to find user by Firebase UID
     let user = await User.findOne({ 
-      $or: [
-        { firebaseUid: decodedToken.uid },
-        { email: userData.email.toLowerCase() }
-      ],
+      firebaseUid: decodedToken.uid,
       isActive: true 
     });
 
     let isNewUser = false;
 
     if (!user) {
-      // Create new user from Google data
-      console.log('Creating new user from Google Sign-in');
-      
-      user = new User({
-        firebaseUid: decodedToken.uid,
-        name: userData.name || userData.email.split('@')[0],
+      // If not found by Firebase UID, try to find by email
+      user = await User.findOne({ 
         email: userData.email.toLowerCase(),
-        role: role,
-        isActive: true,
-        isVerified: userData.emailVerified || false,
-        profilePicture: userData.photoURL || null,
-        address: {},
-        roleSpecificData: {},
-        preferences: {
-          language: 'en',
-          notifications: {
-            email: true,
-            sms: false,
-            push: true,
-          },
-        }
+        isActive: true 
       });
 
-      await user.save();
-      isNewUser = true;
-      console.log('✅ New user created from Google Sign-in');
-    } else {
-      // Update existing user's Firebase UID if needed
-      if (!user.firebaseUid || user.firebaseUid !== decodedToken.uid) {
+      if (user) {
+        // Update existing user's Firebase UID
         user.firebaseUid = decodedToken.uid;
         await user.save();
+        console.log('✅ Existing user found by email and Firebase UID updated');
+      } else {
+        // Create new user from Google data
+        console.log('Creating new user from Google Sign-in');
+        
+        user = new User({
+          firebaseUid: decodedToken.uid,
+          name: userData.name || userData.email.split('@')[0],
+          email: userData.email.toLowerCase(),
+          role: role,
+          isActive: true,
+          isVerified: userData.emailVerified || false,
+          profilePicture: userData.photoURL || null,
+          address: {},
+          roleSpecificData: {},
+          preferences: {
+            language: 'en',
+            notifications: {
+              email: true,
+              sms: false,
+              push: true,
+            },
+          }
+        });
+
+        await user.save();
+        isNewUser = true;
+        console.log('✅ New user created from Google Sign-in');
       }
-      console.log('✅ Existing user found and updated');
+    } else {
+      console.log('✅ Existing user found by Firebase UID');
     }
 
     // Verify role matches (for existing users)

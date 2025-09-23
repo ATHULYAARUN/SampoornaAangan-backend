@@ -4,6 +4,10 @@ const router = express.Router();
 // Import models
 const User = require('../models/User');
 const Admin = require('../models/Admin');
+const Child = require('../models/Child');
+const PregnantWoman = require('../models/PregnantWoman');
+const Adolescent = require('../models/Adolescent');
+const Newborn = require('../models/Newborn');
 
 // Import services
 const emailService = require('../services/emailService');
@@ -17,6 +21,21 @@ const {
   validateProfileUpdate 
 } = require('../middleware/validation');
 
+// Helper function to calculate time ago
+const getTimeAgo = (date) => {
+  const now = new Date();
+  const diffInMs = now - new Date(date);
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes > 1 ? 's' : ''} ago`;
+  if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+  if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+  return new Date(date).toLocaleDateString();
+};
+
 // @desc    Get admin dashboard data
 // @route   GET /api/admin/dashboard
 // @access  Private (Admin)
@@ -25,48 +44,147 @@ const getAdminDashboard = async (req, res) => {
     // Get overall statistics
     const totalUsers = await User.getActiveUsersCount();
     const roleStats = await User.getRoleStats();
-    
+
     // Get recent registrations
     const recentUsers = await User.find({ isActive: true })
       .select('-firebaseUid')
       .sort({ createdAt: -1 })
       .limit(10);
-    
+
+    // Get real registration counts
+    const [childrenCount, pregnantWomenCount, adolescentsCount, newbornsCount] = await Promise.all([
+      Child.countDocuments({ status: 'active' }),
+      PregnantWoman.countDocuments({ status: 'active' }),
+      Adolescent.countDocuments({ status: 'active' }),
+      Newborn.countDocuments({ status: 'active' })
+    ]);
+
+    // Get center-wise statistics
+    const centerStats = await Promise.all([
+      // Akkarakunnu Center
+      {
+        name: 'Akkarakunnu Anganwadi Center',
+        code: 'AW-AK968',
+        children: await Child.countDocuments({ anganwadiCenter: 'Akkarakunnu Anganwadi Center', status: 'active' }),
+        pregnantWomen: await PregnantWoman.countDocuments({ anganwadiCenter: 'Akkarakunnu Anganwadi Center', status: 'active' }),
+        adolescents: await Adolescent.countDocuments({ anganwadiCenter: 'Akkarakunnu Anganwadi Center', status: 'active' }),
+        workers: await User.countDocuments({
+          'roleSpecificData.anganwadiCenter.name': 'Akkarakunnu Anganwadi Center',
+          role: 'anganwadi-worker',
+          isActive: true
+        })
+      },
+      // Veliyanoor Center
+      {
+        name: 'Veliyanoor Anganwadi Center',
+        code: 'AK-VL969',
+        children: await Child.countDocuments({ anganwadiCenter: 'Veliyanoor Anganwadi Center', status: 'active' }),
+        pregnantWomen: await PregnantWoman.countDocuments({ anganwadiCenter: 'Veliyanoor Anganwadi Center', status: 'active' }),
+        adolescents: await Adolescent.countDocuments({ anganwadiCenter: 'Veliyanoor Anganwadi Center', status: 'active' }),
+        workers: await User.countDocuments({
+          'roleSpecificData.anganwadiCenter.name': 'Veliyanoor Anganwadi Center',
+          role: 'anganwadi-worker',
+          isActive: true
+        })
+      }
+    ]);
+
+    // Calculate health alerts (high-risk pregnancies, underweight children, etc.)
+    const healthAlerts = await Promise.all([
+      PregnantWoman.countDocuments({
+        status: 'active',
+        $or: [
+          { 'medicalHistory.complications': { $exists: true, $ne: [] } },
+          { 'currentPregnancy.riskFactors': { $exists: true, $ne: [] } }
+        ]
+      }),
+      Child.countDocuments({
+        status: 'active',
+        nutritionStatus: { $in: ['underweight', 'severely-underweight'] }
+      }),
+      Adolescent.countDocuments({
+        status: 'active',
+        'menstrualHealth.irregularCycles': true
+      })
+    ]);
+
     // Get system stats
     const stats = {
-      totalAnganwadis: 1247,
+      totalAnganwadis: 2, // Your actual count
       registeredUsers: totalUsers,
-      activeWorkers: await User.countDocuments({ 
+      totalChildren: childrenCount,
+      totalPregnantWomen: pregnantWomenCount,
+      totalAdolescents: adolescentsCount,
+      totalNewborns: newbornsCount,
+      activeWorkers: await User.countDocuments({
         role: { $in: ['anganwadi-worker', 'asha-volunteer'] },
-        isActive: true 
+        isActive: true
       }),
-      ashaVolunteers: await User.countDocuments({ 
+      anganwadiWorkers: await User.countDocuments({
+        role: 'anganwadi-worker',
+        isActive: true
+      }),
+      ashaVolunteers: await User.countDocuments({
         role: 'asha-volunteer',
-        isActive: true 
+        isActive: true
       }),
+      healthAlerts: healthAlerts.reduce((sum, count) => sum + count, 0),
+      centerStats
     };
     
-    // Mock recent activities
-    const recentActivities = [
-      {
-        id: 1,
+    // Get recent activities from actual data
+    const recentActivities = [];
+
+    // Get recent user registrations
+    const recentUserRegistrations = await User.find({ isActive: true })
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .select('name role createdAt roleSpecificData');
+
+    recentUserRegistrations.forEach((user, index) => {
+      const timeAgo = getTimeAgo(user.createdAt);
+      const centerName = user.roleSpecificData?.anganwadiCenter?.name || 'Unknown Center';
+      recentActivities.push({
+        id: `user-${index}`,
         type: 'registration',
-        message: 'New Anganwadi Worker registered in Pune District',
-        time: '2 minutes ago',
-      },
-      {
-        id: 2,
-        type: 'update',
-        message: 'Monthly nutrition report submitted by 45 centers',
-        time: '15 minutes ago',
-      },
-      {
-        id: 3,
+        message: `New ${user.role.replace('-', ' ')} "${user.name}" registered${user.role === 'anganwadi-worker' ? ` at ${centerName}` : ''}`,
+        time: timeAgo,
+        priority: 'medium'
+      });
+    });
+
+    // Get recent child registrations
+    const recentChildren = await Child.find({ status: 'active' })
+      .sort({ enrollmentDate: -1 })
+      .limit(2)
+      .select('name anganwadiCenter enrollmentDate');
+
+    recentChildren.forEach((child, index) => {
+      const timeAgo = getTimeAgo(child.enrollmentDate);
+      recentActivities.push({
+        id: `child-${index}`,
+        type: 'registration',
+        message: `New child "${child.name}" enrolled at ${child.anganwadiCenter}`,
+        time: timeAgo,
+        priority: 'low'
+      });
+    });
+
+    // Add health alerts if any
+    if (stats.healthAlerts > 0) {
+      recentActivities.unshift({
+        id: 'health-alert',
         type: 'alert',
-        message: 'Low attendance alert from 3 anganwadis',
-        time: '1 hour ago',
-      },
-    ];
+        message: `${stats.healthAlerts} health alerts require attention`,
+        time: 'Now',
+        priority: 'high'
+      });
+    }
+
+    // Sort by priority and limit to 5 most recent
+    const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
+    recentActivities.sort((a, b) => priorityOrder[b.priority] - priorityOrder[a.priority]);
+    const limitedActivities = recentActivities.slice(0, 5);
     
     res.json({
       success: true,
@@ -74,7 +192,8 @@ const getAdminDashboard = async (req, res) => {
         stats,
         roleStats,
         recentUsers,
-        recentActivities,
+        recentActivities: limitedActivities,
+        lastUpdated: new Date().toISOString()
       },
     });
   } catch (error) {
@@ -489,22 +608,48 @@ const exportUsers = async (req, res) => {
 // Helper function to convert data to CSV
 const convertToCSV = (data) => {
   if (!data.length) return '';
-  
-  const headers = ['Name', 'Email', 'Phone', 'Role', 'District', 'Created At'];
+
+  const headers = [
+    'Name',
+    'Email',
+    'Phone',
+    'Role',
+    'District',
+    'Block',
+    'Village',
+    'Anganwadi Center',
+    'Status',
+    'Verified',
+    'Created At',
+    'Last Login'
+  ];
   const csvRows = [headers.join(',')];
-  
+
   data.forEach(user => {
     const row = [
-      user.name,
-      user.email,
+      user.name || '',
+      user.email || '',
       user.phone || '',
-      user.role,
+      user.role || '',
       user.address?.district || '',
-      user.createdAt?.toISOString() || '',
+      user.address?.block || '',
+      user.address?.village || '',
+      user.roleSpecificData?.anganwadiCenter?.name || '',
+      user.isActive ? 'Active' : 'Inactive',
+      user.isVerified ? 'Verified' : 'Unverified',
+      user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '',
+      user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'
     ];
-    csvRows.push(row.join(','));
+    // Escape commas in values
+    const escapedRow = row.map(value => {
+      if (typeof value === 'string' && value.includes(',')) {
+        return `"${value}"`;
+      }
+      return value;
+    });
+    csvRows.push(escapedRow.join(','));
   });
-  
+
   return csvRows.join('\n');
 };
 

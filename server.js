@@ -12,6 +12,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const passwordResetRoutes = require('./routes/passwordReset');
+const registrationRoutes = require('./routes/registration');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -72,6 +73,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
+app.use('/api/registration', registrationRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
