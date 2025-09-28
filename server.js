@@ -1,5 +1,10 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const mongoose =// Body parsing middleware
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve static files for uploaded worker photos
+app.use('/uploads', express.static('uploads'));quire('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -14,6 +19,9 @@ const adminRoutes = require('./routes/admin');
 const passwordResetRoutes = require('./routes/passwordReset');
 const registrationRoutes = require('./routes/registration');
 const reportsRoutes = require('./routes/reports');
+const attendanceRoutes = require('./routes/attendance');
+const healthRoutes = require('./routes/health');
+const systemSettingsRoutes = require('./routes/systemSettings');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -76,6 +84,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/registration', registrationRoutes);
 app.use('/api/reports', reportsRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/health', healthRoutes);
+app.use('/api/admin/settings', systemSettingsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

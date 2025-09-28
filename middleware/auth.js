@@ -259,16 +259,28 @@ const verifyFlexibleAuth = async (req, res, next) => {
         authenticated = true;
       }
     } catch (firebaseError) {
-      // Try JWT token for admin
+      // Try JWT token for users first
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const admin = await Admin.findById(decoded.id).select('-password');
-
-        if (admin && admin.isActive && !admin.isLocked) {
-          req.admin = admin;
-          req.user = admin;
-          req.authType = 'jwt';
-          authenticated = true;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+        
+        // Check if it's a user token (has userId field)
+        if (decoded.userId) {
+          const user = await User.findById(decoded.userId);
+          if (user && user.isActive) {
+            req.user = user;
+            req.authType = 'jwt-user';
+            authenticated = true;
+          }
+        } 
+        // Check if it's an admin token (has id field)
+        else if (decoded.id) {
+          const admin = await Admin.findById(decoded.id).select('-password');
+          if (admin && admin.isActive && !admin.isLocked) {
+            req.admin = admin;
+            req.user = admin;
+            req.authType = 'jwt-admin';
+            authenticated = true;
+          }
         }
       } catch (jwtError) {
         console.error('Both Firebase and JWT authentication failed:', {

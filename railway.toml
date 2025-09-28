@@ -1,0 +1,14 @@
+# Railway.app Configuration for Backend
+# This file tells Railway how to deploy your backend
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/health"
+restartPolicyType = "ON_FAILURE"
+
+[variables]
+NODE_ENV = "production"
+PORT = "5000"

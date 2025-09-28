@@ -1093,8 +1093,8 @@ const convertAdolescentsToCSV = (adolescents) => {
 };
 
 // Parent-specific routes
-router.get('/my-children', verifyFirebaseAuth, getMyChildren);
-router.get('/my-children/:childId', verifyFirebaseAuth, getMyChildDetails);
+router.get('/my-children', verifyFlexibleAuth, getMyChildren);
+router.get('/my-children/:childId', verifyFlexibleAuth, getMyChildDetails);
 
 // Export routes (support both Firebase and JWT tokens for admin access)
 router.get('/children/export', verifyFlexibleAuth, exportChildren);

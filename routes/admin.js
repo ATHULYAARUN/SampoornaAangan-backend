@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 // Import models
 const User = require('../models/User');
@@ -20,6 +23,43 @@ const {
   validateSearch,
   validateProfileUpdate 
 } = require('../middleware/validation');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(__dirname, '../uploads/worker-photos');
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename: worker-email-timestamp.ext
+    const email = req.body.email ? req.body.email.replace(/[^a-zA-Z0-9]/g, '-') : 'worker';
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    cb(null, `${email}-${timestamp}${ext}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: function (req, file, cb) {
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only JPG and PNG images are allowed'), false);
+    }
+  }
+});
 
 // Helper function to calculate time ago
 const getTimeAgo = (date) => {
@@ -801,12 +841,25 @@ const getWorkers = async (req, res) => {
 const createWorker = async (req, res) => {
   try {
     console.log('Creating worker with data:', req.body);
+    console.log('Uploaded file:', req.file);
     
     const {
       name,
       email,
       phone,
       role,
+      
+      // Enhanced fields for Anganwadi Workers
+      gender,
+      dateOfBirth,
+      qualification,
+      dateOfJoining,
+      designation,
+      experience,
+      alternatePhone,
+      emergencyContactPerson,
+      
+      // Existing fields
       address,
       roleSpecificData,
       customPassword,
@@ -819,6 +872,60 @@ const createWorker = async (req, res) => {
         success: false,
         message: 'Name, email, and role are required'
       });
+    }
+
+    // Enhanced validation for Anganwadi Workers
+    if (role === 'anganwadi-worker') {
+      if (!gender) {
+        return res.status(400).json({
+          success: false,
+          message: 'Gender is required for Anganwadi workers'
+        });
+      }
+      
+      if (gender !== 'female') {
+        return res.status(400).json({
+          success: false,
+          message: 'Only female staff are allowed to be registered as Anganwadi workers.'
+        });
+      }
+
+      if (!dateOfBirth) {
+        return res.status(400).json({
+          success: false,
+          message: 'Date of Birth is required for Anganwadi workers'
+        });
+      }
+
+      // Validate age (must be at least 18)
+      const age = Math.floor((Date.now() - new Date(dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age < 18) {
+        return res.status(400).json({
+          success: false,
+          message: 'Worker must be at least 18 years old'
+        });
+      }
+
+      if (!qualification) {
+        return res.status(400).json({
+          success: false,
+          message: 'Qualification is required for Anganwadi workers'
+        });
+      }
+
+      if (!dateOfJoining) {
+        return res.status(400).json({
+          success: false,
+          message: 'Date of Joining is required for Anganwadi workers'
+        });
+      }
+
+      if (!designation) {
+        return res.status(400).json({
+          success: false,
+          message: 'Designation is required for Anganwadi workers'
+        });
+      }
     }
     
     // Check if user already exists
@@ -850,22 +957,73 @@ const createWorker = async (req, res) => {
       passwordToSend = tempPassword;
     }
     
-    // Create user data
+    // Handle uploaded photo
+    let photoPath = null;
+    if (req.file) {
+      photoPath = `/uploads/worker-photos/${req.file.filename}`;
+    }
+
+    // Parse address and roleSpecificData if they come as JSON strings (from FormData)
+    let parsedAddress = address;
+    let parsedRoleSpecificData = roleSpecificData;
+    
+    if (typeof address === 'string') {
+      try {
+        parsedAddress = JSON.parse(address);
+      } catch (e) {
+        parsedAddress = {};
+      }
+    }
+    
+    if (typeof roleSpecificData === 'string') {
+      try {
+        parsedRoleSpecificData = JSON.parse(roleSpecificData);
+      } catch (e) {
+        parsedRoleSpecificData = {};
+      }
+    }
+
+    // Create user data with all enhanced fields
     const userData = {
       firebaseUid: `admin-created-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      
+      // Basic Information
       name: name.trim(),
       email: email.toLowerCase(),
       phone: phone || '',
       role,
+      
+      // Enhanced fields for Anganwadi Workers
+      gender: gender || undefined,
+      dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+      qualification: qualification || undefined,
+      
+      // Employment Details
+      dateOfJoining: dateOfJoining ? new Date(dateOfJoining) : undefined,
+      designation: designation || undefined,
+      experience: experience ? parseInt(experience) : undefined,
+      
+      // Emergency Contact
+      alternatePhone: alternatePhone || '',
+      emergencyContactPerson: emergencyContactPerson || '',
+      
+      // Worker Photo
+      workerPhoto: photoPath,
+      
+      // Address Information
       address: {
-        street: address?.street || '',
-        city: address?.city || '',
-        state: address?.state || '',
-        pincode: address?.pincode || '',
-        district: address?.district || '',
-        block: address?.block || ''
+        street: parsedAddress?.street || '',
+        city: parsedAddress?.city || '',
+        state: parsedAddress?.state || '',
+        pincode: parsedAddress?.pincode || '',
+        district: parsedAddress?.district || '',
+        block: parsedAddress?.block || ''
       },
-      roleSpecificData: roleSpecificData || {},
+      
+      // Role-specific data
+      roleSpecificData: parsedRoleSpecificData || {},
+      
+      // Authentication
       tempPassword,
       isActive: true,
       isVerified: false,
@@ -889,16 +1047,26 @@ const createWorker = async (req, res) => {
     
     // Send welcome email with credentials
     try {
-      await sendWorkerWelcomeEmail(user, passwordToSend);
-      console.log('✅ Welcome email sent to:', user.email);
+      const emailResult = await sendWorkerWelcomeEmail(user, passwordToSend);
+      console.log('✅ Welcome email sent successfully to:', user.email);
+      console.log('📧 Email details:', {
+        messageId: emailResult.messageId,
+        recipient: user.email,
+        hasCustomPassword: useCustomPassword
+      });
     } catch (emailError) {
-      console.error('❌ Failed to send welcome email:', emailError);
-      // Don't fail the worker creation if email fails
+      console.error('❌ Failed to send welcome email:', emailError.message);
+      console.error('Email error details:', {
+        recipient: user.email,
+        error: emailError.message,
+        stack: emailError.stack
+      });
+      // Don't fail the worker creation if email fails - worker account is still created
     }
     
     res.status(201).json({
       success: true,
-      message: `Worker account created successfully${useCustomPassword ? ' with custom password' : ' with auto-generated password'}. Login credentials have been sent via email.`,
+      message: `Anganwadi Worker account created successfully${useCustomPassword ? ' with custom password' : ' with auto-generated password'}. Welcome email with login credentials has been sent to ${user.email}.`,
       data: {
         user: {
           id: user._id,
@@ -906,10 +1074,17 @@ const createWorker = async (req, res) => {
           email: user.email,
           role: user.role,
           phone: user.phone,
+          gender: user.gender,
+          qualification: user.qualification,
+          designation: user.designation,
+          dateOfJoining: user.dateOfJoining,
           isActive: user.isActive,
           createdAt: user.createdAt,
-          hasCustomPassword: useCustomPassword
-        }
+          hasCustomPassword: useCustomPassword,
+          hasPhoto: !!user.workerPhoto
+        },
+        emailSent: true,
+        loginUrl: 'https://sampoornaangan.com/login'
       }
     });
     
@@ -1026,14 +1201,22 @@ const resendWorkerCredentials = async (req, res) => {
     }
     
     // Send credentials email
-    await sendWorkerWelcomeEmail(user, tempPassword);
-    
-    console.log(`✅ Credentials resent to ${user.email} by admin: ${req.admin.email}`);
-    
-    res.json({
-      success: true,
-      message: 'Credentials sent successfully'
-    });
+    try {
+      const emailResult = await sendWorkerWelcomeEmail(user, tempPassword);
+      console.log(`✅ Credentials resent to ${user.email} by admin: ${req.admin.email}`);
+      console.log('📧 Resend email details:', { messageId: emailResult.messageId });
+      
+      res.json({
+        success: true,
+        message: `Login credentials have been resent to ${user.email} successfully`
+      });
+    } catch (emailError) {
+      console.error('❌ Failed to resend credentials:', emailError.message);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send credentials email. Please try again.'
+      });
+    }
     
   } catch (error) {
     console.error('Resend credentials error:', error);
@@ -1086,17 +1269,26 @@ const resetWorkerPassword = async (req, res) => {
     await user.save();
     
     // Send new credentials email
-    await sendWorkerWelcomeEmail(user, passwordToSend);
-    
-    console.log(`✅ Password reset for ${user.email} by admin: ${req.admin.email}`);
-    
-    res.json({
-      success: true,
-      message: `Password ${useCustomPassword ? 'set' : 'reset'} successfully. New credentials have been sent via email.`,
-      data: {
-        hasCustomPassword: useCustomPassword
-      }
-    });
+    try {
+      const emailResult = await sendWorkerWelcomeEmail(user, passwordToSend);
+      console.log(`✅ Password reset for ${user.email} by admin: ${req.admin.email}`);
+      console.log('📧 Password reset email details:', { messageId: emailResult.messageId });
+      
+      res.json({
+        success: true,
+        message: `Password ${useCustomPassword ? 'set' : 'reset'} successfully. New login credentials have been sent to ${user.email}.`,
+        data: {
+          hasCustomPassword: useCustomPassword,
+          emailSent: true
+        }
+      });
+    } catch (emailError) {
+      console.error('❌ Failed to send password reset email:', emailError.message);
+      res.status(500).json({
+        success: false,
+        message: 'Password was reset but failed to send email notification. Please contact the user directly.'
+      });
+    }
     
   } catch (error) {
     console.error('Reset password error:', error);
@@ -1203,29 +1395,33 @@ const getWorkerStats = async (req, res) => {
 
 // Helper function to send welcome email
 const sendWorkerWelcomeEmail = async (user, tempPassword) => {
-  const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/login`;
+  const loginUrl = `https://sampoornaangan.com/login`;
   
+  // Create both HTML and text versions for better compatibility
   const emailContent = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
         <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to SampoornaAangan</h1>
-        <p style="color: #f0f0f0; margin: 10px 0 0 0; font-size: 16px;">Your worker account has been created</p>
+        <p style="color: #f0f0f0; margin: 10px 0 0 0; font-size: 16px;">Your Worker Account</p>
       </div>
       
       <div style="background: white; padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
-        <h2 style="color: #333; margin-top: 0;">Hello ${user.name},</h2>
+        <h2 style="color: #333; margin-top: 0;">Dear ${user.name},</h2>
         
         <p style="color: #666; line-height: 1.6;">
-          Your account has been created by the Panchayat Officer for the SampoornaAangan portal. 
-          You can now access the system using the credentials below:
+          Your Anganwadi Worker account has been successfully created.<br>
+          Here are your login credentials:
         </p>
         
         <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="color: #333; margin-top: 0;">Your Login Credentials:</h3>
-          <p style="margin: 5px 0;"><strong>Email:</strong> ${user.email}</p>
-          <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 4px;">${tempPassword}</code></p>
-          <p style="margin: 5px 0;"><strong>Role:</strong> ${user.role.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+          <h3 style="color: #333; margin-top: 0;">Login Credentials:</h3>
+          <p style="margin: 8px 0;"><strong>Email:</strong> ${user.email}</p>
+          <p style="margin: 8px 0;"><strong>Password:</strong> <code style="background: #e9ecef; padding: 4px 8px; border-radius: 4px; font-family: monospace; font-size: 14px;">${tempPassword}</code></p>
         </div>
+        
+        <p style="color: #666; line-height: 1.6;">
+          Please log in at: <a href="${loginUrl}" style="color: #667eea; text-decoration: none; font-weight: bold;">${loginUrl}</a> and change your password after first login.
+        </p>
         
         <div style="text-align: center; margin: 30px 0;">
           <a href="${loginUrl}" style="background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
@@ -1237,7 +1433,7 @@ const sendWorkerWelcomeEmail = async (user, tempPassword) => {
           <h4 style="color: #856404; margin-top: 0;">🔐 Important Security Notice:</h4>
           <ul style="color: #856404; margin: 0; padding-left: 20px;">
             <li>This is a temporary password for your first login</li>
-            <li>You will be prompted to set a new secure password</li>
+            <li>You must change your password after first login</li>
             <li>Please keep your credentials confidential</li>
             <li>Contact your administrator if you face any issues</li>
           </ul>
@@ -1265,26 +1461,63 @@ const sendWorkerWelcomeEmail = async (user, tempPassword) => {
         
         <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
         
-        <p style="color: #999; font-size: 14px; text-align: center; margin: 0;">
+        <p style="color: #666; line-height: 1.6;">
+          Regards,<br>
+          <strong>SampoornaAangan Admin Team</strong>
+        </p>
+        
+        <p style="color: #999; font-size: 14px; text-align: center; margin: 20px 0 0 0;">
           This email was sent by SampoornaAangan Portal<br>
           If you have any questions, please contact your administrator.
         </p>
       </div>
     </div>
   `;
+
+  // Plain text version for better email client compatibility
+  const textContent = `
+Dear ${user.name},
+
+Your Anganwadi Worker account has been successfully created.
+
+Here are your login credentials:
+Email: ${user.email}
+Password: ${tempPassword}
+
+You can log in here: ${loginUrl}
+
+Please change your password after your first login.
+
+IMPORTANT SECURITY NOTICE:
+- This is a temporary password for your first login
+- You must change your password after first login
+- Please keep your credentials confidential
+- Contact your administrator if you face any issues
+
+Once you log in, you'll have access to your dashboard where you can manage your assigned responsibilities.
+
+Best regards,
+SampoornaAangan Admin Team
+support@sampoornaangan.com
+
+---
+This email was sent by SampoornaAangan Portal
+If you have any questions, please contact your administrator.
+  `;
   
   // Use existing email service
   return await emailService.sendEmail({
     to: user.email,
-    subject: 'Welcome to SampoornaAangan - Your Account Details',
-    html: emailContent
+    subject: 'Welcome to SampoornaAangan – Your Worker Account',
+    html: emailContent,
+    text: textContent
   });
 };
 
 // Worker Management Routes
 router.get('/workers', verifyAdminAuth, checkRole('super-admin'), getWorkers);
-router.post('/workers', verifyAdminAuth, checkRole('super-admin'), createWorker);
-router.put('/workers/:id', verifyAdminAuth, checkRole('super-admin'), validateObjectId, updateWorker);
+router.post('/workers', verifyAdminAuth, checkRole('super-admin'), upload.single('workerPhoto'), createWorker);
+router.put('/workers/:id', verifyAdminAuth, checkRole('super-admin'), validateObjectId, upload.single('workerPhoto'), updateWorker);
 router.patch('/workers/:id/toggle-status', verifyAdminAuth, checkRole('super-admin'), validateObjectId, toggleWorkerStatus);
 router.post('/workers/:id/resend-credentials', verifyAdminAuth, checkRole('super-admin'), validateObjectId, resendWorkerCredentials);
 router.post('/workers/:id/reset-password', verifyAdminAuth, checkRole('super-admin'), validateObjectId, resetWorkerPassword);

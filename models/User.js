@@ -34,6 +34,81 @@ const userSchema = new mongoose.Schema({
     trim: true,
     match: [/^(\+91\s?)?[0-9]{10}$/, 'Please enter a valid phone number'],
   },
+
+  // Enhanced fields for Anganwadi Workers
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    validate: {
+      validator: function(value) {
+        // Only validate gender restriction for anganwadi-worker role
+        if (this.role === 'anganwadi-worker' && value !== 'female') {
+          return false;
+        }
+        return true;
+      },
+      message: 'Only female staff are allowed to be registered as Anganwadi workers.'
+    }
+  },
+
+  dateOfBirth: {
+    type: Date,
+    validate: {
+      validator: function(value) {
+        if (!value) return true; // Optional field
+        const age = Math.floor((Date.now() - value.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+        return age >= 18;
+      },
+      message: 'Worker must be at least 18 years old'
+    }
+  },
+
+  qualification: {
+    type: String,
+    enum: ['10th-pass', '12th-pass', 'graduate', 'postgraduate']
+  },
+
+  // Employment Details
+  dateOfJoining: {
+    type: Date,
+    validate: {
+      validator: function(value) {
+        if (!value) return true; // Optional field
+        return value <= new Date(); // Cannot be in future
+      },
+      message: 'Date of joining cannot be in the future'
+    }
+  },
+
+  designation: {
+    type: String,
+    enum: ['worker', 'helper', 'supervisor']
+  },
+
+  experience: {
+    type: Number,
+    min: [0, 'Experience cannot be negative'],
+    max: [50, 'Experience cannot exceed 50 years']
+  },
+
+  // Emergency Contact
+  alternatePhone: {
+    type: String,
+    trim: true,
+    match: [/^(\+91\s?)?[0-9]{10}$/, 'Please enter a valid alternate phone number'],
+  },
+
+  emergencyContactPerson: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Emergency contact person name cannot exceed 100 characters'],
+  },
+
+  // Worker Photo
+  workerPhoto: {
+    type: String, // Will store file path or URL
+    default: null,
+  },
   
   // Role-based Information
   role: {
