@@ -47,9 +47,9 @@ router.get('/', verifyAdmin, async (req, res) => {
       settings = new SystemSettings({
         general: {
           systemName: 'SampoornaAangan',
-          panchayatName: '',
-          district: '',
-          state: '',
+          panchayatName: 'Elikkulam',
+          district: 'Kottayam',
+          state: 'Kerala',
           logo: null,
           primaryColor: '#e91e63',
           secondaryColor: '#2196f3'

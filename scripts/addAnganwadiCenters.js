@@ -23,7 +23,7 @@ const addAnganwadiCenters = async () => {
         },
         address: {
           locality: 'Akkarakkunnu',
-          district: 'Thiruvananthapuram',
+          district: 'Kottayam',
           state: 'Kerala',
           pincode: '695502'
         },
@@ -61,7 +61,7 @@ const addAnganwadiCenters = async () => {
         },
         address: {
           locality: 'Veliyanoor',
-          district: 'Thiruvananthapuram',
+          district: 'Kottayam',
           state: 'Kerala',
           pincode: '695502'
         },

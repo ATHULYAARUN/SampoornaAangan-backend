@@ -1177,14 +1177,47 @@ const toggleWorkerStatus = async (req, res) => {
   }
 };
 
+// @desc    Check email configuration status
+// @route   GET /api/admin/check-email-config
+// @access  Private (Admin only)
+const checkEmailConfig = async (req, res) => {
+  try {
+    const emailStatus = emailService.getStatus();
+    const testResult = await emailService.testConnection();
+    
+    res.json({
+      success: true,
+      emailConfigured: emailStatus.configured,
+      service: emailStatus.service,
+      message: testResult.message,
+      canSendEmails: testResult.success
+    });
+  } catch (error) {
+    console.error('❌ Email config check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check email configuration',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Resend worker credentials
 // @route   POST /api/admin/workers/:id/resend-credentials
 // @access  Private (Admin only)
 const resendWorkerCredentials = async (req, res) => {
   try {
-    const { id } = req.params;
+    // Handle both route formats: /workers/:id/resend-credentials and /resend-worker-credentials
+    const workerId = req.params.id || req.body.workerId;
     
-    const user = await User.findById(id);
+    if (!workerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Worker ID is required'
+      });
+    }
+    
+    const user = await User.findById(workerId);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -1192,37 +1225,65 @@ const resendWorkerCredentials = async (req, res) => {
       });
     }
     
-    // Generate new temporary password if user hasn't set permanent password
-    let tempPassword = user.tempPassword;
-    if (!tempPassword) {
-      tempPassword = generateRandomPassword();
-      user.tempPassword = tempPassword;
-      await user.save();
+    if (user.role !== 'worker') {
+      return res.status(400).json({
+        success: false,
+        message: 'User is not a worker'
+      });
     }
+    
+    console.log(`📧 Resending credentials for worker: ${user.name} (${user.email})`);
+    
+    // Check if email service is configured
+    const emailStatus = emailService.getStatus();
+    if (!emailStatus.configured) {
+      console.warn('⚠️ Email service not configured properly');
+      return res.status(400).json({
+        success: false,
+        message: 'Email service is not configured. Please contact administrator to set up email credentials.'
+      });
+    }
+    
+    // Generate new temporary password
+    const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+    
+    // Update user with new temporary password
+    user.tempPassword = tempPassword;
+    user.passwordChangeRequired = true;
+    user.hasTempPassword = true;
+    await user.save();
+    console.log(`🔑 Generated new temporary password for ${user.email}`);
     
     // Send credentials email
     try {
-      const emailResult = await sendWorkerWelcomeEmail(user, tempPassword);
-      console.log(`✅ Credentials resent to ${user.email} by admin: ${req.admin.email}`);
-      console.log('📧 Resend email details:', { messageId: emailResult.messageId });
+      await emailService.sendCredentialsEmail(user.email, user.name, user.email, tempPassword);
+      console.log(`✅ Credentials resent to ${user.email} by admin: ${req.user?.email || 'unknown'}`);
       
       res.json({
         success: true,
-        message: `Login credentials have been resent to ${user.email} successfully`
+        message: `Login credentials have been resent to ${user.email} successfully`,
+        tempPassword: tempPassword, // Include for testing purposes
+        data: {
+          workerName: user.name,
+          workerEmail: user.email,
+          emailSent: true,
+          hasNewPassword: true
+        }
       });
     } catch (emailError) {
-      console.error('❌ Failed to resend credentials:', emailError.message);
+      console.error('❌ Email sending error:', emailError);
       res.status(500).json({
         success: false,
-        message: 'Failed to send credentials email. Please try again.'
+        message: 'Failed to send credentials email. Please check email configuration.',
+        error: emailError.message
       });
     }
-    
   } catch (error) {
-    console.error('Resend credentials error:', error);
+    console.error('❌ Resend credentials error:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to resend credentials'
+      message: 'Failed to resend worker credentials',
+      error: error.message
     });
   }
 };
@@ -1519,6 +1580,9 @@ router.get('/workers', verifyAdminAuth, checkRole('super-admin'), getWorkers);
 router.post('/workers', verifyAdminAuth, checkRole('super-admin'), upload.single('workerPhoto'), createWorker);
 router.put('/workers/:id', verifyAdminAuth, checkRole('super-admin'), validateObjectId, upload.single('workerPhoto'), updateWorker);
 router.patch('/workers/:id/toggle-status', verifyAdminAuth, checkRole('super-admin'), validateObjectId, toggleWorkerStatus);
+// Email configuration and worker credential routes
+router.get('/check-email-config', verifyAdminAuth, checkRole('admin'), checkEmailConfig);
+router.post('/resend-worker-credentials', verifyAdminAuth, checkRole('admin'), resendWorkerCredentials);
 router.post('/workers/:id/resend-credentials', verifyAdminAuth, checkRole('super-admin'), validateObjectId, resendWorkerCredentials);
 router.post('/workers/:id/reset-password', verifyAdminAuth, checkRole('super-admin'), validateObjectId, resetWorkerPassword);
 router.delete('/workers/:id', verifyAdminAuth, checkRole('super-admin'), validateObjectId, deleteWorker);

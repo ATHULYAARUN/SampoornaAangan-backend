@@ -689,12 +689,238 @@ const changePassword = async (req, res) => {
   }
 };
 
+// @desc    Send password reset email
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email address is required'
+      });
+    }
+
+    // Check if user exists (check both User and Admin models)
+    let user = await User.findOne({ email: email.toLowerCase() });
+    let isAdmin = false;
+    
+    if (!user) {
+      user = await Admin.findOne({ email: email.toLowerCase() });
+      isAdmin = true;
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email address'
+      });
+    }
+
+    // Generate reset token
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    const resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetPasswordExpire = Date.now() + 30 * 60 * 1000; // 30 minutes
+
+    // Save reset token to user
+    user.resetPasswordToken = resetPasswordToken;
+    user.resetPasswordExpire = resetPasswordExpire;
+    await user.save();
+
+    // Create reset URL
+    const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${resetToken}`;
+
+    // Email content
+    const message = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">SampoornaAangan</h1>
+          <p style="color: #f0f0f0; margin: 10px 0 0 0; font-size: 16px;">Password Reset Request</p>
+        </div>
+        
+        <div style="background: white; padding: 30px; border: 1px solid #e0e0e0; border-top: none;">
+          <h2 style="color: #333; margin-top: 0;">Hello ${user.name},</h2>
+          
+          <p style="color: #666; line-height: 1.6;">
+            You have requested a password reset for your SampoornaAangan account. 
+            Click the button below to reset your password:
+          </p>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background: #667eea; color: white; padding: 15px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+              Reset Your Password
+            </a>
+          </div>
+          
+          <p style="color: #666; line-height: 1.6;">
+            Or copy and paste this link in your browser:<br>
+            <a href="${resetUrl}" style="color: #667eea; word-break: break-all;">${resetUrl}</a>
+          </p>
+          
+          <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 20px 0;">
+            <h4 style="color: #856404; margin-top: 0;">🔐 Important Security Information:</h4>
+            <ul style="color: #856404; margin: 0; padding-left: 20px;">
+              <li>This link will expire in 30 minutes</li>
+              <li>If you didn't request this reset, you can safely ignore this email</li>
+              <li>For security, please don't share this link with anyone</li>
+            </ul>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 30px 0;">
+          
+          <p style="color: #666; line-height: 1.6;">
+            Best regards,<br>
+            <strong>SampoornaAangan Support Team</strong>
+          </p>
+          
+          <p style="color: #999; font-size: 14px; text-align: center; margin: 20px 0 0 0;">
+            This email was sent by SampoornaAangan Portal<br>
+            If you have any questions, please contact your administrator.
+          </p>
+        </div>
+      </div>
+    `;
+
+    // Send email using email service
+    try {
+      const emailService = require('../services/emailService');
+      await emailService.sendEmail({
+        to: user.email,
+        subject: 'SampoornaAangan - Password Reset Request',
+        html: message,
+        text: `Hello ${user.name},\n\nYou have requested a password reset. Please visit this link to reset your password: ${resetUrl}\n\nThis link will expire in 30 minutes.\n\nIf you didn't request this reset, please ignore this email.\n\nBest regards,\nSampoornaAangan Support Team`
+      });
+
+      console.log(`✅ Password reset email sent to: ${user.email}`);
+
+      res.json({
+        success: true,
+        message: 'Password reset email sent successfully. Please check your inbox.',
+        data: {
+          emailSent: true,
+          expiresIn: '30 minutes'
+        }
+      });
+
+    } catch (emailError) {
+      console.error('❌ Failed to send password reset email:', emailError);
+      
+      // Clear the reset token since email failed
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save();
+      
+      res.status(500).json({
+        success: false,
+        message: 'Email service is not configured. Please contact your administrator for password reset assistance.'
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process password reset request'
+    });
+  }
+};
+
+// @desc    Reset password with token
+// @route   POST /api/auth/reset-password/:token
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password is required'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Hash the token to match stored version
+    const crypto = require('crypto');
+    const resetPasswordToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find user with valid reset token
+    let user = await User.findOne({
+      resetPasswordToken,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    let isAdmin = false;
+    if (!user) {
+      user = await Admin.findOne({
+        resetPasswordToken,
+        resetPasswordExpire: { $gt: Date.now() }
+      });
+      isAdmin = true;
+    }
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired password reset token'
+      });
+    }
+
+    // Hash new password
+    const bcrypt = require('bcryptjs');
+    const saltRounds = 12;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Update password and clear reset fields
+    if (isAdmin) {
+      user.password = hashedPassword;
+    } else {
+      user.hashedPassword = hashedPassword;
+      user.tempPassword = null; // Clear any temporary password
+    }
+    
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    console.log(`✅ Password reset successful for: ${user.email}`);
+
+    res.json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+      data: {
+        passwordReset: true,
+        userType: isAdmin ? 'admin' : 'user'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reset password'
+    });
+  }
+};
+
 // Routes
 router.post('/register', validateUserRegistration, validateRoleSpecificData, registerUser);
 router.post('/login', loginUser);
 router.post('/google-login', googleLogin);
 router.post('/admin/login', validateAdminLogin, loginAdmin);
 router.post('/change-password', verifyUserAuth, changePassword);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password/:token', resetPassword);
 router.post('/logout', logoutUser);
 router.post('/admin/logout', logoutAdmin);
 router.get('/me', getMe);

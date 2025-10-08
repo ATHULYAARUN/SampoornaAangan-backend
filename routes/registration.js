@@ -42,6 +42,25 @@ const registerChild = async (req, res) => {
       });
     }
 
+    // Validate age (must be between 3-6 years for Anganwadi)
+    const dob = new Date(dateOfBirth);
+    const today = new Date();
+    const ageInYears = Math.floor((today - dob) / (365.25 * 24 * 60 * 60 * 1000));
+    
+    if (ageInYears < 3) {
+      return res.status(400).json({
+        success: false,
+        message: 'Child must be at least 3 years old for Anganwadi registration'
+      });
+    }
+    
+    if (ageInYears > 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Child must be 6 years old or younger for Anganwadi registration'
+      });
+    }
+
     // Check if child already exists (same name, parent phone, and DOB)
     const existingChild = await Child.findOne({
       name: name.trim(),

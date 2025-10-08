@@ -13,14 +13,19 @@ async function addHealthDataToChildren() {
     const healthDataUpdates = [
       {
         name: 'Akhil',
-        currentWeight: 12.5,
-        currentHeight: 85,
+        currentWeight: 16.5, // Updated for 5-year-old
+        currentHeight: 105,   // Updated for 5-year-old
         bloodGroup: 'O+',
         nutritionStatus: 'normal',
         vaccinations: [
-          { vaccineName: 'BCG', dateGiven: new Date('2022-01-15'), givenBy: 'Dr. Priya' },
-          { vaccineName: 'DPT 1', dateGiven: new Date('2022-03-10'), givenBy: 'Nurse Sarah' },
-          { vaccineName: 'OPV 1', dateGiven: new Date('2022-03-10'), givenBy: 'Nurse Sarah' }
+          { vaccineName: 'BCG', dateGiven: new Date('2020-01-15'), givenBy: 'Dr. Priya' },
+          { vaccineName: 'DPT 1', dateGiven: new Date('2020-03-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'DPT 2', dateGiven: new Date('2020-05-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'DPT 3', dateGiven: new Date('2020-07-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'OPV 1', dateGiven: new Date('2020-03-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'OPV 2', dateGiven: new Date('2020-05-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'OPV 3', dateGiven: new Date('2020-07-10'), givenBy: 'Nurse Sarah' },
+          { vaccineName: 'MMR 1', dateGiven: new Date('2021-01-15'), givenBy: 'Dr. Ravi' }
         ]
       },
       {

@@ -8,15 +8,15 @@ const systemSettingsSchema = new mongoose.Schema({
     },
     panchayatName: {
       type: String,
-      default: ''
+      default: 'Elikkulam'
     },
     district: {
       type: String,
-      default: ''
+      default: 'Kottayam'
     },
     state: {
       type: String,
-      default: ''
+      default: 'Kerala'
     },
     logo: {
       type: String,

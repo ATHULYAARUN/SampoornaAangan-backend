@@ -18,7 +18,9 @@ const { verifyFirebaseAuth, checkRole } = require('../middleware/auth');
 // @access  Private (Admin only)
 const getDashboardStats = async (req, res) => {
   try {
-    // Get total counts
+    console.log('📊 Fetching dashboard statistics...');
+    
+    // Get total counts with better performance
     const [
       totalWorkers,
       totalChildren,
@@ -35,7 +37,9 @@ const getDashboardStats = async (req, res) => {
       User.distinct('anganwadiCenter', { role: { $in: ['anganwadi-worker', 'asha-volunteer'] }, status: 'active' }).then(centers => centers.length)
     ]);
 
-    // Get worker distribution by anganwadi
+    console.log('📈 Basic counts:', { totalWorkers, totalChildren, totalPregnantWomen, totalAdolescents, totalNewborns, activeAnganwadis });
+
+    // Get worker distribution by anganwadi with enhanced aggregation
     const workerDistribution = await User.aggregate([
       {
         $match: {
@@ -47,13 +51,22 @@ const getDashboardStats = async (req, res) => {
         $group: {
           _id: '$anganwadiCenter',
           workerCount: { $sum: 1 },
-          roles: { $push: '$role' }
+          roles: { $push: '$role' },
+          workers: { 
+            $push: {
+              name: '$name',
+              role: '$role',
+              phone: '$phone',
+              email: '$email'
+            }
+          }
         }
       },
       {
         $project: {
           anganwadiCenter: '$_id',
           workerCount: 1,
+          workers: 1,
           anganwadiWorkers: {
             $size: {
               $filter: {
@@ -75,7 +88,7 @@ const getDashboardStats = async (req, res) => {
       { $sort: { workerCount: -1 } }
     ]);
 
-    // Get children distribution by anganwadi
+    // Get children distribution by anganwadi with age breakdown
     const childrenDistribution = await Child.aggregate([
       {
         $match: { status: 'active' }
@@ -91,6 +104,14 @@ const getDashboardStats = async (req, res) => {
                 { $cond: [{ $lte: ['$age', 5] }, '3-5', '6+'] }
               ]
             }
+          },
+          children: {
+            $push: {
+              name: '$name',
+              age: '$age',
+              parentName: '$parentName',
+              gender: '$gender'
+            }
           }
         }
       },
@@ -98,6 +119,7 @@ const getDashboardStats = async (req, res) => {
         $project: {
           anganwadiCenter: '$_id',
           childrenCount: 1,
+          children: 1,
           age0to2: {
             $size: {
               $filter: {
@@ -127,46 +149,82 @@ const getDashboardStats = async (req, res) => {
       { $sort: { childrenCount: -1 } }
     ]);
 
-    // Get recent registrations (last 30 days)
+    // Get recent registrations (last 30 days) with enhanced tracking
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const recentRegistrations = await Promise.all([
-      Child.countDocuments({ enrollmentDate: { $gte: thirtyDaysAgo } }),
-      PregnantWoman.countDocuments({ registrationDate: { $gte: thirtyDaysAgo } }),
-      Adolescent.countDocuments({ registrationDate: { $gte: thirtyDaysAgo } }),
-      Newborn.countDocuments({ registrationDate: { $gte: thirtyDaysAgo } })
+    const [recentChildren, recentPregnantWomen, recentAdolescents, recentNewborns] = await Promise.all([
+      Child.countDocuments({ 
+        enrollmentDate: { $gte: thirtyDaysAgo },
+        status: 'active'
+      }),
+      PregnantWoman.countDocuments({ 
+        registrationDate: { $gte: thirtyDaysAgo },
+        status: 'active'
+      }),
+      Adolescent.countDocuments({ 
+        registrationDate: { $gte: thirtyDaysAgo },
+        status: 'active'
+      }),
+      Newborn.countDocuments({ 
+        registrationDate: { $gte: thirtyDaysAgo },
+        status: 'active'
+      })
     ]);
+
+    // Calculate performance metrics
+    const totalBeneficiaries = totalChildren + totalPregnantWomen + totalAdolescents + totalNewborns;
+    const workerToBeneficiaryRatio = totalWorkers > 0 ? (totalBeneficiaries / totalWorkers).toFixed(2) : '0';
+    const avgBeneficiariesPerCenter = activeAnganwadis > 0 ? (totalBeneficiaries / activeAnganwadis).toFixed(2) : '0';
+    const totalNewRegistrations = recentChildren + recentPregnantWomen + recentAdolescents + recentNewborns;
+    const monthlyGrowthRate = totalBeneficiaries > 0 ? ((totalNewRegistrations / totalBeneficiaries) * 100).toFixed(2) : '0';
+
+    console.log('📊 Performance metrics calculated:', { 
+      workerToBeneficiaryRatio, 
+      avgBeneficiariesPerCenter, 
+      monthlyGrowthRate 
+    });
+
+    const responseData = {
+      overview: {
+        totalAnganwadis: activeAnganwadis,
+        totalWorkers,
+        totalChildren,
+        totalPregnantWomen,
+        totalAdolescents,
+        totalNewborns,
+        totalBeneficiaries
+      },
+      distributions: {
+        workerDistribution,
+        childrenDistribution
+      },
+      recentActivity: {
+        newChildren: recentChildren,
+        newPregnantWomen: recentPregnantWomen,
+        newAdolescents: recentAdolescents,
+        newNewborns: recentNewborns,
+        totalNewRegistrations
+      },
+      performanceMetrics: {
+        workerToBeneficiaryRatio: parseFloat(workerToBeneficiaryRatio),
+        avgBeneficiariesPerCenter: parseFloat(avgBeneficiariesPerCenter),
+        monthlyGrowthRate: parseFloat(monthlyGrowthRate),
+        systemEfficiency: totalWorkers > 0 && totalBeneficiaries > 0 ? 'Optimal' : 'Needs Attention'
+      },
+      generatedAt: new Date().toISOString(),
+      dataFreshness: 'Real-time'
+    };
+
+    console.log('✅ Dashboard stats generated successfully');
 
     res.json({
       success: true,
-      data: {
-        overview: {
-          totalAnganwadis: activeAnganwadis,
-          totalWorkers,
-          totalChildren,
-          totalPregnantWomen,
-          totalAdolescents,
-          totalNewborns,
-          totalBeneficiaries: totalChildren + totalPregnantWomen + totalAdolescents + totalNewborns
-        },
-        distributions: {
-          workerDistribution,
-          childrenDistribution
-        },
-        recentActivity: {
-          newChildren: recentRegistrations[0],
-          newPregnantWomen: recentRegistrations[1],
-          newAdolescents: recentRegistrations[2],
-          newNewborns: recentRegistrations[3],
-          totalNewRegistrations: recentRegistrations.reduce((sum, count) => sum + count, 0)
-        },
-        generatedAt: new Date().toISOString()
-      }
+      data: responseData
     });
 
   } catch (error) {
-    console.error('Dashboard stats error:', error);
+    console.error('❌ Dashboard stats error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard statistics',
