@@ -53,10 +53,16 @@ const corsOptions = {
   origin: process.env.NODE_ENV === 'production'
     ? ['https://sampoornaaangan-forntend2.onrender.com']
     : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   credentials: true,
-  optionsSuccessStatus: 200,
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
+
+// Apply CORS and ensure preflight is handled
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '50mb' }));
