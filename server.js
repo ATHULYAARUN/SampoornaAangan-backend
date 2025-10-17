@@ -50,8 +50,8 @@ app.use('/api/', limiter);
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://your-frontend-domain.com'] 
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://sampoornaaangan-forntend2.onrender.com']
     : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'],
   credentials: true,
   optionsSuccessStatus: 200,
