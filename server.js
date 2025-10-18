@@ -202,7 +202,7 @@ try {
 // Basic database connection
 const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/sampoornaangan';
+    const MONGODB_URI = 'mongodb+srv://sampoornaadmin:qiEbNqkB6fhm-2G@cluster0.8tilqvr.mongodb.net/sampoornaangan?retryWrites=true&w=majority&appName=Cluster0';
     console.log('🔗 Attempting to connect to MongoDB:', mongoUri);
     
     const conn = await mongoose.connect(mongoUri, {

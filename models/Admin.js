@@ -270,7 +270,7 @@ adminSchema.statics.createDefaultAdmin = async function() {
     const defaultAdmin = new this({
       username: process.env.ADMIN_USERNAME || 'admin',
       email: process.env.ADMIN_EMAIL || 'admin@sampoornaangan.gov.in',
-      password: process.env.ADMIN_PASSWORD || 'admin',
+      password: process.env.ADMIN_PASSWORD || 'admin123',
       name: 'Super Administrator',
       role: 'super-admin',
       isVerified: true,
