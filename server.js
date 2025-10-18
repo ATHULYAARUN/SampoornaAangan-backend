@@ -202,14 +202,15 @@ try {
 // Basic database connection
 const connectDB = async () => {
   try {
-    const MONGODB_URI = 'mongodb+srv://sampoornaadmin:qiEbNqkB6fhm-2G@cluster0.8tilqvr.mongodb.net/sampoornaangan?retryWrites=true&w=majority&appName=Cluster0';
-    console.log('🔗 Attempting to connect to MongoDB:', mongoUri);
-    
+    // Prefer environment variable, fallback to default connection string
+    const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://sampoornaadmin:qiEbNqkB6fhm-2G@cluster0.8tilqvr.mongodb.net/sampoornaangan?retryWrites=true&w=majority&appName=Cluster0';
+    console.log('🔗 Attempting to connect to MongoDB');
+
     const conn = await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
     });
-    
+
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     return conn;
   } catch (error) {
