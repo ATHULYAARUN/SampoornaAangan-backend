@@ -326,6 +326,15 @@ const loginAdmin = async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
+    console.log('🔐 Admin login attempt:', { identifier, hasPassword: !!password });
+
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username/email and password are required',
+      });
+    }
+
     // Find admin by username or email
     const admin = await Admin.findOne({
       $or: [
@@ -336,27 +345,35 @@ const loginAdmin = async (req, res) => {
     });
     
     if (!admin) {
+      console.log('❌ Admin not found:', identifier);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
       });
     }
+
+    console.log('✅ Admin found:', admin.email);
 
     // Verify password
     const isPasswordValid = await admin.comparePassword(password);
     
     if (!isPasswordValid) {
+      console.log('❌ Password invalid for admin:', admin.email);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
       });
     }
 
+    console.log('✅ Password valid, generating token...');
+
     // Generate JWT token
     const token = generateAdminToken(admin._id);
 
+    console.log('✅ Admin login successful:', admin.email);
+
     // Return admin data
-    res.json({
+    return res.status(200).json({
       success: true,
       message: 'Admin login successful',
       data: {
@@ -371,11 +388,15 @@ const loginAdmin = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Admin login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-    });
+    console.error('❌ Admin login error:', error);
+    console.error('Error stack:', error.stack);
+    
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server error',
+      });
+    }
   }
 };
 
