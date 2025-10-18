@@ -365,8 +365,8 @@ const generateAdminToken = (adminId) => {
 // Middleware to validate request origin
 const validateOrigin = (req, res, next) => {
   const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? ['https://sampoornaaangan-forntend3.onrender.com', 'https://sampoornaaangan-forntend2.onrender.com']
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174'];
+    ? ['https://sampoornaaangan-forntend3.onrender.com']
+    : ['http://localhost:3000', 'http://localhost:5173'];
   
   const origin = req.headers.origin;
   

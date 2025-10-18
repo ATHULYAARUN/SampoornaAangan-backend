@@ -27,7 +27,7 @@ const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin (safe to no-op in serverless)
 try {
   initializeFirebase();
 } catch (error) {
@@ -42,9 +42,7 @@ app.use(compression());
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
   max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-  },
+  message: { error: 'Too many requests from this IP, please try again later.' },
 });
 app.use('/api/', limiter);
 
@@ -54,7 +52,6 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : process.env.NODE_ENV === 'production'
     ? [
         'https://sampoornaaangan-forntend3.onrender.com',
-    
       ]
     : [
         'http://localhost:3000',
@@ -66,11 +63,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
+    if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       console.log(`✅ CORS allowed for origin: ${origin}`);
       callback(null, true);
@@ -86,30 +79,25 @@ const corsOptions = {
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
-  maxAge: 86400, // 24 hours
+  maxAge: 86400,
 };
 
-// Apply CORS middleware globally
 app.use(cors(corsOptions));
-
-// Explicitly handle preflight requests for all routes
 app.options('*', cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve static files
+// Static
 app.use('/uploads', express.static('uploads'));
 
-// Logging middleware
+// Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));
 }
-
-const PORT = process.env.PORT || 5000;
 
 // Health check
 app.get('/health', (req, res) => {
@@ -117,68 +105,32 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-try {
-  app.use('/api/auth', authRoutes);
-} catch (e) { console.log('Auth routes not available'); }
+try { app.use('/api/auth', authRoutes); } catch (e) { console.log('Auth routes not available'); }
+try { app.use('/api/users', userRoutes); } catch (e) { console.log('User routes not available'); }
+try { app.use('/api/admin', adminRoutes); } catch (e) { console.log('Admin routes not available'); }
+try { app.use('/api/password-reset', passwordResetRoutes); } catch (e) { console.log('Password reset routes not available'); }
+try { app.use('/api/registration', registrationRoutes); } catch (e) { console.log('Registration routes not available'); }
+try { app.use('/api/reports', reportsRoutes); } catch (e) { console.log('Reports routes not available'); }
+try { app.use('/api/attendance', attendanceRoutes); } catch (e) { console.log('Attendance routes not available'); }
+try { app.use('/api/attendance-test', attendanceTestRoutes); } catch (e) { console.log('Attendance test routes not available'); }
+try { app.use('/api/health', healthRoutes); } catch (e) { console.log('Health routes not available'); }
+try { app.use('/api/admin/settings', systemSettingsRoutes); } catch (e) { console.log('System settings routes not available'); }
 
-try {
-  app.use('/api/users', userRoutes);
-} catch (e) { console.log('User routes not available'); }
-
-try {
-  app.use('/api/admin', adminRoutes);
-} catch (e) { console.log('Admin routes not available'); }
-
-try {
-  app.use('/api/password-reset', passwordResetRoutes);
-} catch (e) { console.log('Password reset routes not available'); }
-
-try {
-  app.use('/api/registration', registrationRoutes);
-} catch (e) { console.log('Registration routes not available'); }
-
-try {
-  app.use('/api/reports', reportsRoutes);
-} catch (e) { console.log('Reports routes not available'); }
-
-try {
-  app.use('/api/attendance', attendanceRoutes);
-} catch (e) { console.log('Attendance routes not available'); }
-
-try {
-  app.use('/api/attendance-test', attendanceTestRoutes);
-} catch (e) { console.log('Attendance test routes not available'); }
-
-try {
-  app.use('/api/health', healthRoutes);
-} catch (e) { console.log('Health routes not available'); }
-
-try {
-  app.use('/api/admin/settings', systemSettingsRoutes);
-} catch (e) { console.log('System settings routes not available'); }
-
-// Schemes routes (essential for welfare benefits)
+// Schemes and Feedback
 app.use('/api/schemes', schemesRoutes);
-
-// Feedback routes (essential for parent feedback)
 app.use('/api/feedback', feedbackRoutes);
 
-// Root endpoint
+// Root
 app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to SampoornaAngan API',
     version: '1.0.0',
     health: '/health',
-    availableEndpoints: [
-      '/api/schemes',
-      '/api/auth',
-      '/api/users',
-      '/health'
-    ]
+    availableEndpoints: ['/api/schemes', '/api/auth', '/api/users', '/health']
   });
 });
 
-// 404 handler
+// 404
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -187,7 +139,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Error handling middleware
+// Error handling
 try {
   app.use(errorHandler);
 } catch (e) {
@@ -198,68 +150,34 @@ try {
   });
 }
 
-// Basic database connection
+// Database connection (singleton)
+let dbConnectingPromise = null;
 const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) return mongoose.connection;
+  if (dbConnectingPromise) return dbConnectingPromise;
   try {
-    // Prefer environment variable, fallback to default connection string
     const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://sampoornaadmin:qiEbNqkB6fhm-2G@cluster0.8tilqvr.mongodb.net/sampoornaangan?retryWrites=true&w=majority&appName=Cluster0';
     console.log('🔗 Attempting to connect to MongoDB');
-
-    const conn = await mongoose.connect(mongoUri, {
+    dbConnectingPromise = mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+    }).then(conn => {
+      console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+      return conn;
+    }).catch(err => {
+      console.error('❌ Database connection error:', err.message);
+      dbConnectingPromise = null;
+      return null;
     });
-
-    console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-    return conn;
+    return dbConnectingPromise;
   } catch (error) {
     console.error('❌ Database connection error:', error.message);
-    console.log('⚠️  Continuing without database connection...');
+    dbConnectingPromise = null;
     return null;
   }
 };
 
-// Start server
-const startServer = async () => {
-  try {
-    // Try to connect to database (non-blocking)
-    await connectDB();
-    
-    const server = app.listen(PORT, () => {
-      console.log(`
-🚀 SampoornaAngan Backend Server Started
-📍 Environment: ${process.env.NODE_ENV || 'development'}
-🌐 Server running on port ${PORT}
-📊 Health check: http://localhost:${PORT}/health
-📚 API Base URL: http://localhost:${PORT}/api
-🔧 Available endpoints:
-   • GET  /api/schemes - Get welfare schemes
-   • GET  /api/schemes/enrollments - Get enrollments
-   • POST /api/schemes/enroll - Enroll in scheme
-      `);
-    });
+// Initiate connection on cold start (serverless-safe)
+connectDB();
 
-    // Graceful shutdown handlers
-    process.on('SIGTERM', () => {
-      console.log('🛑 SIGTERM received. Shutting down gracefully...');
-      server.close(() => {
-        console.log('✅ Process terminated');
-        process.exit(0);
-      });
-    });
-
-    process.on('SIGINT', () => {
-      console.log('🛑 SIGINT received. Shutting down gracefully...');
-      server.close(() => {
-        console.log('✅ Process terminated');
-        process.exit(0);
-      });
-    });
-
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
+module.exports = app;
