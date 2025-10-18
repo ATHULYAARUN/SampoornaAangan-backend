@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "name": "sampoornaaangan-backend",
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "MONGODB_URI": "@mongodb_uri",
+    "JWT_SECRET": "@jwt_secret",
+    "ALLOWED_ORIGINS": "@allowed_origins"
+  }
+}
