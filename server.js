@@ -49,19 +49,51 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : process.env.NODE_ENV === 'production'
+    ? [
+        'https://sampoornaaangan-forntend3.onrender.com',
+        'https://sampoornaaangan-forntend2.onrender.com',
+        'https://sampoornaaangan-frontend.onrender.com'
+      ]
+    : [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176'
+      ];
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://sampoornaaangan-forntend3.onrender.com', 'https://sampoornaaangan-forntend2.onrender.com']
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'],
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      console.log(`✅ CORS allowed for origin: ${origin}`);
+      callback(null, true);
+    } else {
+      console.log(`❌ CORS blocked for origin: ${origin}`);
+      console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204,
+  maxAge: 86400, // 24 hours
 };
 
-// Apply CORS and ensure preflight is handled
+// Apply CORS middleware globally
 app.use(cors(corsOptions));
+
+// Explicitly handle preflight requests for all routes
 app.options('*', cors(corsOptions));
 
 // Body parsing middleware
