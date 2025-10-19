@@ -53,9 +53,10 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
   : process.env.NODE_ENV === 'production'
     ? [
-        'https://sampoornaaangan-forntend3.onrender.com',
-        'https://sampoorna-aangan-emqe.vercel.app',
+        
+        
         'https://sampoornaaangan-frontend.onrender.com'
+        
       ]
     : [
         'http://localhost:3000',
