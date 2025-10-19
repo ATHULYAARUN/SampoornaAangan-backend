@@ -54,7 +54,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : process.env.NODE_ENV === 'production'
     ? [
         'https://sampoornaaangan-forntend3.onrender.com',
-    
+        'https://sampoorna-aangan-emqe.vercel.app'
       ]
     : [
         'http://localhost:3000',
@@ -71,7 +71,8 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    if (allowedOrigins.includes(origin)) {
+    const isAllowed = allowedOrigins.includes(origin) || /\.vercel\.app$/.test(origin);
+    if (isAllowed) {
       console.log(`✅ CORS allowed for origin: ${origin}`);
       callback(null, true);
     } else {
