@@ -53,10 +53,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
   : process.env.NODE_ENV === 'production'
     ? [
-        
-        
         'https://sampoornaaangan-frontend.onrender.com'
-        
       ]
     : [
         'http://localhost:3000',
@@ -65,6 +62,10 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
         'http://localhost:5175',
         'http://localhost:5176'
       ];
+
+app.get('/api/test', (req, res) => {
+  res.json({ message: '✅ Backend is reachable!' });
+});
 
 const corsOptions = {
   origin: (origin, callback) => {
