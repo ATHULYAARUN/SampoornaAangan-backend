@@ -63,7 +63,6 @@ router.post('/test-worker-attendance', async (req, res) => {
     // Combine children data with attendance status
     const childrenWithAttendance = children.map(child => {
       const attendance = todaysAttendance.find(att => att.childId.toString() === child._id.toString());
-      
       return {
         _id: child._id,
         name: child.name,

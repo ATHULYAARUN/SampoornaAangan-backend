@@ -672,7 +672,7 @@ const getMyChildren = async (req, res) => {
 
     console.log('🔍 Fetching children for parent:', user.name, user.email, user.phone);
 
-    // Find children based on parent phone or email
+    // Find children based on parent phone or email (original logic)
     const query = {
       $or: [
         { parentPhone: user.phone },
